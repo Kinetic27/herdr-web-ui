@@ -7,6 +7,10 @@ between releases do not reach them. Remote-PC runtime bundles are versioned sepa
 
 ## [Unreleased]
 
+### Fixed
+- GJC conversations are resolved from the foreground process directory when it differs from
+  the pane directory. ([#333](https://github.com/devswha/herdr-web-ui/pull/333) by @Kinetic27)
+
 ## [0.3.43] - 2026-10-02
 
 ### Changed
