@@ -166,6 +166,6 @@ it("starts the gjc this server found on its PATH, by absolute path, and waits un
     process.env["PATH"] = "/nonexistent";
     const bare = await shell();
     await expect(startShellAgent("gjc", bare, [], { timeoutMs: 1500 })).rejects.toThrow("not on this server's PATH");
-    expect((await paneRead({ paneId: bare })).text).not.toContain("gjc");
+    expect((await paneRead({ paneId: bare })).text.replaceAll(home, "")).not.toContain("gjc");
   } finally { process.env["PATH"] = path; }
 });
