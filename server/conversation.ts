@@ -759,9 +759,11 @@ async function ompTranscriptPath(paneId: string): Promise<string> {
 async function resolveTranscript(pane: HerdrPane, cwd: string, codexHome?: string, panes?: HerdrPane[]): Promise<{ source: RecognizedConversation["source"]; path: string }> {
   const paneId = pane.pane_id;
   let agent = pane.agent ?? pane.agent_session?.agent ?? "";
-  // A previous agent's session report can survive after GJC takes over the pane.
-  // Process ownership outranks that report, even when herdr has no current agent.
-  if (agent !== "gjc") {
+  // herdr names no agent for this pane: a session report an earlier agent left behind says
+  // nothing about what runs now, so the pane's processes are asked before it is followed.
+  // A pane herdr does label is not asked: the lookup would cost every chat poll an RPC (and
+  // a process-table read on Windows), and a gjc below another agent would take its chat.
+  if (!pane.agent) {
     const info = await herdrRpc<{ process_info?: { shell_pid?: number; foreground_processes?: { argv?: unknown }[] } }>(
       "pane.process_info", { pane_id: paneId },
     ).catch(() => null);
