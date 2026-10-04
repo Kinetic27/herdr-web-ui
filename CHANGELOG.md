@@ -27,6 +27,8 @@ between releases do not reach them. Remote-PC runtime bundles are versioned sepa
   ([#346](https://github.com/devswha/herdr-web-ui/pull/346) by @WOULDU-pres)
 
 ### Fixed
+- Chat reads a running GJC session even when herdr has no current agent label or retains
+  a previous Codex session report, instead of querying the wrong agent and failing to load.
 - On an Android phone, dragging down at the top of a chat no longer reloads the app. The drag
   was handed on to the page, where Chrome takes it for pull-to-refresh, so reading back
   through a conversation kept ending in a reload.

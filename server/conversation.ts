@@ -37,7 +37,7 @@ import { herdrRpc, sessionSnapshot } from "./herdr/client.ts";
 import { codexHistorySegments, createCodexTranscriptParser, codexOutputText, codexTranscriptPath, defaultCodexHome, parseCodexTranscript, readRange } from "./codex.ts";
 import { CODEX_IMAGE_REF, codexTranscriptImage } from "./codex-images.ts";
 import { claudeProcessSession, claudeTranscriptFile, forgetClaudeSessions } from "./claude-store.ts";
-import { forgetGjcState, gjcTranscriptForPane, storeRelative } from "./gjc-runtime.ts";
+import { forgetGjcState, gjcPidUnderShell, gjcTranscriptForPane, isGjcProcess, storeRelative } from "./gjc-runtime.ts";
 import { isOmoProcess, omoSessionForPane } from "./omo.ts";
 import { piTranscriptPath } from "./pi.ts";
 import { piAbandonedTurns, piBranchSegments } from "./pi-tree.ts";
@@ -758,7 +758,18 @@ async function ompTranscriptPath(paneId: string): Promise<string> {
  */
 async function resolveTranscript(pane: HerdrPane, cwd: string, codexHome?: string, panes?: HerdrPane[]): Promise<{ source: RecognizedConversation["source"]; path: string }> {
   const paneId = pane.pane_id;
-  const agent = pane.agent ?? pane.agent_session?.agent ?? "";
+  let agent = pane.agent ?? pane.agent_session?.agent ?? "";
+  // A previous agent's session report can survive after GJC takes over the pane.
+  // Process ownership outranks that report, even when herdr has no current agent.
+  if (agent !== "gjc") {
+    const info = await herdrRpc<{ process_info?: { shell_pid?: number; foreground_processes?: { argv?: unknown }[] } }>(
+      "pane.process_info", { pane_id: paneId },
+    ).catch(() => null);
+    const running = (info?.process_info?.foreground_processes ?? []).some((process) =>
+      isGjcProcess(Array.isArray(process.argv) ? process.argv.map(String) : []),
+    );
+    if (running || await gjcPidUnderShell(info?.process_info?.shell_pid)) agent = "gjc";
+  }
   if ((agent === "omo" || agent === "pi" || agent === "claude") && await paneRunsOmo(paneId)) {
     return { source: "omo-transcript", path: await omoTranscriptPath(paneId, cwd, panes) };
   }
