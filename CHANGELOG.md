@@ -49,6 +49,7 @@ between releases do not reach them. Remote-PC runtime bundles are versioned sepa
 - Chat message and code copy buttons work on plain-HTTP LAN addresses using the browser's
   copy command when the Clipboard API is unavailable or refused. If neither method works,
   the chat explains how to copy manually instead of reporting success or throwing an error.
+  ([#613](https://github.com/devswha/herdr-web-ui/pull/613) by @Kinetic27)
 - Command palette shortcut hints follow changed bindings and disappear for disabled ones.
   App shortcuts also recognize physical letter keys on non-Latin layouts outside IME composition.
   ([#607](https://github.com/devswha/herdr-web-ui/pull/607))
