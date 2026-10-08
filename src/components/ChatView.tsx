@@ -15,6 +15,7 @@ import { turnRevision } from "../lib/turnRevision.ts";
 import { useWholeOutput as useScopedOutput } from "../lib/useWholeOutput.ts";
 import { turnSkills } from "../lib/skillActivity.ts";
 import { ApiError } from "../lib/api.ts";
+import { copyText } from "../lib/clipboard.ts";
 import { useMachineApi } from "../lib/machineContext.tsx";
 import { toTranscriptMessages, type TranscriptMessage } from "../lib/transcript.ts";
 import { isLiveWorkTurn, isWaitingWorkTurn, formatWorkDuration, splitTurn, workFailed, workStartsOpen, workSummary, type ToolPart as ToolPartType } from "../lib/workBlocks.ts";
@@ -109,16 +110,21 @@ function plainText(markdown: string): string {
 function CopyButton({ text, label, className = "icon-button chat-copy", children }: { text: string; label: string; className?: string; children?: React.ReactNode }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const copy = async (): Promise<void> => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    const ok = await copyText(text);
+    setCopied(ok);
+    setCopyFailed(!ok);
+    if (ok) window.setTimeout(() => setCopied(false), 1500);
   };
   return (
+    <>
     <button type="button" className={copied ? `${className} is-copied` : className} onClick={() => void copy()} aria-label={copied ? t("Copied") : label} title={copied ? t("Copied") : label}>
       {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
       {children}
     </button>
+    {copyFailed && <span role="alert">{t("Couldn't copy. Select the text and copy it manually.")}</span>}
+    </>
   );
 }
 
