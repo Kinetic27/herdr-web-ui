@@ -4,7 +4,10 @@ import { copyText } from "./clipboard.ts";
 // bun:test has no DOM: the few pieces copyText touches are stood in for, and the copy command
 // "copies" whatever text field is focused and selected when it runs
 class FakeElement { focused = 0; focus(): void { this.focused += 1; dom.active = this; } }
-class FakeInput extends FakeElement {}
+class FakeInput extends FakeElement {
+  selectionStart = 0; selectionEnd = 0; selectionDirection = "none";
+  setSelectionRange(start: number, end: number): void { this.selectionStart = start; this.selectionEnd = end; }
+}
 class FakeTextArea extends FakeElement {
   value = ""; readOnly = false; style: Record<string, string> = {}; selected = false; attached = false;
   selectionStart = 0; selectionEnd = 0; selectionDirection = "none";
@@ -72,6 +75,17 @@ describe("copyText", () => {
     clipboardApi({ writeText: () => Promise.reject(new DOMException("Denied", "NotAllowedError")) });
     expect(await copyText("ls -la")).toBe(true);
     expect(dom.copied).toBe("ls -la");
+  });
+
+  it("leaves focus where the user moved it while a refused clipboard API kept them waiting", async () => {
+    const button = new FakeElement();
+    const composer = new FakeInput();
+    button.focus();
+    clipboardApi({ writeText: () => { composer.focus(); return Promise.reject(new DOMException("Denied", "NotAllowedError")); } });
+    expect(await copyText("late")).toBe(false);
+    expect(dom.active).toBe(composer);
+    expect(composer.focused).toBe(1);
+    expect(dom.fields).toEqual([]);
   });
 
   it("reports failure, not success, when the copy command is refused too", async () => {

@@ -5,6 +5,7 @@
  * Returns whether the text is on the clipboard.
  */
 export async function copyText(text: string, fallback?: HTMLElement | null): Promise<boolean> {
+  const initiator = document.activeElement;
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
@@ -13,6 +14,9 @@ export async function copyText(text: string, fallback?: HTMLElement | null): Pro
   } catch {
     /* no clipboard API here, or the browser refused */
   }
+  // A refusal can come late. If focus has moved on by then, the user is elsewhere (the message box,
+  // a terminal, perhaps mid-IME): taking focus to copy would cut into what they are typing.
+  if (document.activeElement !== initiator) return false;
   const active = document.activeElement;
   const selection = window.getSelection();
   const ranges = selection ? Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index).cloneRange()) : [];
