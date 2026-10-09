@@ -139,7 +139,7 @@ function CodeBlock({ language, value }: { language: string; value: string }) {
           {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
         </button>
       </div>
-      {copyFailed && <span role="alert">{t("Couldn't copy. Select the text and copy it manually.")}</span>}
+      {copyFailed && <p className="markdown-code-error" role="alert">{t("Couldn't copy. Select the text and copy it manually.")}</p>}
       <pre><code>{fold !== null && !expanded ? fold.head : value}</code></pre>
       {fold !== null && (
         <button type="button" className="markdown-code-more" aria-expanded={expanded} onClick={toggle}>

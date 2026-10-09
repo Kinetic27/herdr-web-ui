@@ -238,6 +238,15 @@ try {
   await messageCopy.click();
   await insecureLog.getByRole("alert").filter({ hasText: "Couldn't copy. Select the text and copy it manually." }).waitFor();
   assert.equal(await messageCopy.getAttribute("aria-label"), "Copy as markdown");
+  // the hint outlives the hover/focus that shows the copy controls (reduced motion: no fade to wait out)
+  await insecure.emulateMedia({ reducedMotion: "reduce" });
+  await insecure.mouse.move(0, 0);
+  await insecure.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  const messageHint = insecureLog.getByRole("alert").filter({ hasText: "Couldn't copy. Select the text and copy it manually." }).first();
+  assert.equal(await messageHint.evaluate((node) => {
+    for (let element: Element | null = node; element !== null; element = element.parentElement) if (getComputedStyle(element).opacity === "0") return false;
+    return true;
+  }), true, "the manual-copy hint stays visible after the pointer and focus leave the turn");
   await insecureLog.getByRole("button", { name: "Copy code", exact: true }).waitFor();
   await insecureLog.getByRole("button", { name: "Copy code", exact: true }).focus();
   await insecureLog.getByRole("button", { name: "Copy code", exact: true }).click();
