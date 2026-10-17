@@ -250,7 +250,7 @@ describe("GJC SDK transcript identity binding", () => {
     ]);
   });
 
-  it("rejects with a typed unavailable error when git cannot resolve a worktree root", async () => {
+  it("falls back when git cannot resolve a worktree root, a failure retrying would not clear", async () => {
     let rootLookups = 0;
     const rootResolver: GjcSdkWorktreeRootResolver = async () => {
       rootLookups += 1;
@@ -258,8 +258,7 @@ describe("GJC SDK transcript identity binding", () => {
     };
     const { calls, runner } = fakeRunner([page([session()]), saved()]);
 
-    await expect(gjcSdkTranscriptWithRunner([321], cwd, agentDir, runner, rootResolver))
-      .rejects.toEqual(new GjcSdkLookupError("unavailable"));
+    await expect(gjcSdkTranscriptWithRunner([321], cwd, agentDir, runner, rootResolver)).resolves.toBeNull();
     expect(rootLookups).toBe(1);
     expect(calls).toHaveLength(0);
   });
@@ -401,13 +400,12 @@ describe("GJC SDK transcript identity binding", () => {
     expect(error).not.toHaveProperty("stderr");
   });
 
-  it("propagates an execution failure during exact session resolution", async () => {
+  it("falls back on an execution failure during exact session resolution, as only a timeout is retried", async () => {
     const { calls, runner } = fakeRunner((_args, call) => {
       if (call === 0) return page([session()]);
       throw Object.assign(new Error("SDK executable unavailable"), { code: "ENOENT" });
     });
-    await expect(gjcSdkTranscriptWithRunner([321], cwd, agentDir, runner))
-      .rejects.toEqual(new GjcSdkLookupError("unavailable"));
+    await expect(gjcSdkTranscriptWithRunner([321], cwd, agentDir, runner)).resolves.toBeNull();
     expect(calls).toHaveLength(2);
   });
 
@@ -454,10 +452,8 @@ describe("GJC SDK transcript identity binding", () => {
       throw new Error("broker credentials and local paths must not escape");
     };
 
-    const error = await gjcSdkTranscriptWithRunner([321], cwd, agentDir, runner).catch((error: unknown) => error);
-    expect(error).toBeInstanceOf(GjcSdkLookupError);
-    expect(error).toMatchObject({ reason: "unavailable", message: "GJC SDK lookup failed" });
-    expect(error).not.toHaveProperty("cause");
+    // a transport failure stays quiet: no error, and nothing of its message, leaves the lookup
+    await expect(gjcSdkTranscriptWithRunner([321], cwd, agentDir, runner)).resolves.toBeNull();
     expect(captured?.command).toBe("gjc");
     expect(captured?.args).toEqual([...commandArgs, "--json-input", JSON.stringify({ scope: scope(cwd) })]);
     expect(captured?.options.env.GJC_SDK_BROKER_AUTOSTART).toBe("0");

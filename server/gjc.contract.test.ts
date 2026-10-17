@@ -7,7 +7,6 @@ import { ConversationUnavailable, gjcTranscriptPath, paneConversation } from "./
 import { isGjcProcess } from "./gjc-runtime.ts";
 import { startShellAgent } from "./shell-agent.ts";
 import { createServer } from "./index.ts";
-import { GjcSdkLookupError } from "./gjc-sdk.ts";
 
 const home = realpathSync(mkdtempSync(join(tmpdir(), "herdr-gjc-binding-")));
 const agentDir = join(home, ".gjc", "agent");
@@ -259,10 +258,12 @@ it("conversation API distinguishes a temporary SDK failure from a replaced or mi
     expect(timeout.status).toBe(504);
     expect(await timeout.json()).toMatchObject({ error: { code: "gjc_sdk_timeout" } });
 
+    // a gjc that fails outright (not installed, too old, broker down) does not clear by
+    // retrying: it keeps the terminal fallback it had before
     writeRegistry([row], paths, "unavailable");
     const unavailable = await fetch(url);
-    expect(unavailable.status).toBe(503);
-    expect(await unavailable.json()).toMatchObject({ error: { code: "gjc_sdk_unavailable" } });
+    expect(unavailable.status).toBe(200);
+    expect(await unavailable.json()).toMatchObject({ source: "scrollback" });
 
     writeRegistry([row], paths);
     const recovered = await fetch(url);
@@ -338,7 +339,7 @@ async function expectSdkFailure(scenario: string): Promise<void> {
     else if (scenario === "stale") writeRegistry([sdkRow(pid, home, `failure-${scenario}-a`, { live: false })], paths);
     else writeRegistry([target]);
 
-    await expect(paneConversation(id)).rejects.toBeInstanceOf(scenario === "unavailable" ? GjcSdkLookupError : ConversationUnavailable);
+    await expect(paneConversation(id)).rejects.toBeInstanceOf(ConversationUnavailable);
   });
 }
 

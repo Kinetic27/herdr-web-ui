@@ -247,7 +247,9 @@ async function runBounded(
       }),
     ]);
   } catch (error) {
-    throw lookupExecutionError(error);
+    // only a timeout is worth retrying; a missing or failing gjc stays the fallback it was
+    const failure = lookupExecutionError(error);
+    throw failure.reason === "timeout" ? failure : error;
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }
@@ -271,7 +273,9 @@ async function resolveWorktreeRoot(
     ]);
     return root === null ? null : canonicalPath(root) ?? undefined;
   } catch (error) {
-    throw lookupExecutionError(error);
+    const failure = lookupExecutionError(error);
+    if (failure.reason === "timeout") throw failure;
+    return undefined;
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }
