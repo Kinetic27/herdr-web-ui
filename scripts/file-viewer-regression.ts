@@ -1164,6 +1164,27 @@ try {
       console.log(`PASS Markdown inline/new tab/reload/raw/download: ${width}px ${theme}`);
     }
   }
+  // The copied read link is a document-only page, not a modal. Its frame must constrain the
+  // body on both sides of the mobile header breakpoint; the page is not a second scroll owner.
+  for (const width of [1280, 601, 600, 390]) {
+    const readerContext = await browser.newContext({ viewport: { width, height: 800 } });
+    try {
+      const readerPage = await readerContext.newPage();
+      await readerPage.goto(`${origin}/?read=${encodeURIComponent(join(root, "long.md"))}`);
+      const readerBody = readerPage.locator(".file-reader-body");
+      await readerBody.locator(".file-viewer-markdown p").first().waitFor();
+      const geometry = await readerBody.evaluate((element) => ({ height: element.clientHeight, scrollHeight: element.scrollHeight, viewport: innerHeight }));
+      assert.ok(geometry.height < geometry.viewport, `${width}px: standalone reader body is bounded by the viewport`);
+      assert.ok(geometry.scrollHeight > geometry.height, `${width}px: long document has an internal scroll range`);
+      await readerPage.mouse.move(width / 2, 400);
+      await readerPage.mouse.wheel(0, 600);
+      await readerPage.waitForFunction(() => (document.querySelector(".file-reader-body")?.scrollTop ?? 0) > 0);
+      assert.equal(await readerPage.evaluate(() => window.scrollY), 0, `${width}px: wheel scroll belongs to the document body, not the page`);
+      console.log(`PASS standalone Markdown reader scroll ownership: ${width}px`);
+    } finally {
+      await readerContext.close();
+    }
+  }
   // A file-only link owns its PC even if this browser last selected another one.
   // The remote fixture has no panes; only the bridge hop is supplied here, and its
   // file requests still go through the real server's stat/Range implementation.
