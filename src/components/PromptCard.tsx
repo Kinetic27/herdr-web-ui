@@ -6,7 +6,7 @@ import "./PromptCard.css";
 import { ApiError } from "../lib/api.ts";
 import { useMachineApi } from "../lib/machineContext.tsx";
 import type { InteractivePrompt, PromptAnswer } from "../../shared/protocol.ts";
-import { focusFollowsAnswer, pressOrigin, type TypedAnswer } from "../lib/promptAnswer.ts";
+import { focusFollowsAnswer, optionNumber, pressOrigin, type TypedAnswer } from "../lib/promptAnswer.ts";
 import { dismissKeyboardOn } from "../lib/keyboard.ts";
 import { useT } from "../lib/i18n.ts";
 import { userErrorMessage, type UserError } from "../lib/userError.ts";
@@ -257,8 +257,9 @@ export function PromptCard({ paneId, prompt, onPromptChanged, onAnswered, typedA
                 {option.description !== null && <span className="prompt-card-option-description">{option.description}</span>}
               </span>
             );
-            // the key the user can type, drawn as a keycap; the option's name keeps the menu's "1."
-            const number = <span className="prompt-card-number"><span aria-hidden="true">{index + 1}</span><span className="visually-hidden">{index + 1}.</span></span>;
+            // Display numbers skip the separate custom field; answers retain the original index.
+            const visibleNumber = optionNumber(prompt, index);
+            const number = <span className="prompt-card-number"><span aria-hidden="true">{visibleNumber}</span><span className="visually-hidden">{visibleNumber}.</span></span>;
             const described = option.description !== null ? " has-description" : "";
             if (prompt.multi_select) {
               const checked = selected.has(index);
@@ -306,7 +307,7 @@ export function PromptCard({ paneId, prompt, onPromptChanged, onAnswered, typedA
         <div className="prompt-card-confirm" role="alert" ref={confirmRef}>
           {/* an option's label can run to pages (a review to approve): the question shows two lines
               of it and scrolls in itself, and the two buttons stay whole, on one line */}
-          <span className="prompt-card-confirm-text">{t("Send {answer}?", { answer: `${typedAnswer.option_index + 1}. ${prompt.options[typedAnswer.option_index]?.label ?? ""}` })}</span>
+          <span className="prompt-card-confirm-text">{t("Send {answer}?", { answer: `${optionNumber(prompt, typedAnswer.option_index)}. ${prompt.options[typedAnswer.option_index]?.label ?? ""}` })}</span>
           <span className="prompt-card-confirm-actions">
             <button type="button" className="btn btn-primary" disabled={pending} onClick={(event) => void answer(typedAnswer, event).then((current) => { if (current) onTypedAnswerDone?.(); })}>{t("Confirm")}</button>
             <button type="button" className="btn" disabled={pending} onClick={() => onTypedAnswerDone?.()}>{t("Cancel")}</button>
