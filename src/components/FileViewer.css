@@ -556,22 +556,25 @@
 }
 
 /*
- * A markdown file in a tab of its own (FileReader): the document is the page. The frame fills the
- * window at every width and the reader fills the frame under any reload line above it, so the
- * reader's body is the one scroll box; if it grew with the document, a wheel over it would scroll
- * the page instead.
+ * A markdown file in a tab of its own (FileReader): the document is the page. On screen the frame
+ * fills the window at every width and the reader fills the frame under any reload line above it,
+ * so the reader's body is the one scroll box; if it grew with the document, a wheel over it would
+ * scroll the page instead. Printed (or saved as a PDF), the frame grows with the document again,
+ * so every page of it prints rather than the first screen cut off.
  */
-.file-reader-frame {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
+@media screen {
+  .file-reader-frame {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
 
-.file-reader-frame > .file-reader {
-  flex: 1 1 auto;
-  height: auto;
-  min-height: 0;
+  .file-reader-frame > .file-reader {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+  }
 }
 
 .file-reader {
