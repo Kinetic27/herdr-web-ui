@@ -9,6 +9,14 @@ const prompt = (options: string[], custom: number | null, multi = false): Intera
 });
 
 describe("answering a prompt from the chat", () => {
+  it("numbers visible choices continuously while preserving their original answer indices", () => {
+    const question = prompt(["First", "Second", "Other (type your own)", "Esc"], 2);
+    expect(answerFromText(question, "3")).toEqual({ option_index: 3 });
+    expect(answerFromText(question, "4")).toEqual({ custom_text: "4" });
+    expect(answerHint(question)).toBe("Type 1–3 or your own reply…");
+    const multi = prompt(["Other (type your own)", "First", "Second"], 0, true);
+    expect(answerFromText(multi, "1 2")).toEqual({ option_indices: [1, 2] });
+  });
   it("reads the agent's option numbers, labels and bound letters, else the typed reply", () => {
     const question = prompt(["LM-O (Recommended)", "YCB-V"], 2);
     expect(answerFromText(question, "2")).toEqual({ option_index: 1 });

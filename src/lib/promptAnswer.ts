@@ -9,9 +9,14 @@ import { t } from "./i18n.ts";
 
 export type TypedAnswer = Pick<PromptAnswer, "option_index" | "option_indices" | "custom_text">;
 
-/** The options a typed number can pick, by the number the agent shows (index + 1). */
+/** Original indices of the choices visible in the card, in displayed order. */
 function choices(prompt: InteractivePrompt): number[] {
   return prompt.options.flatMap((_, index) => index === prompt.custom_option_index ? [] : [index]);
+}
+
+/** The separate custom-answer field does not take a number in the visible menu. */
+export function optionNumber(prompt: InteractivePrompt, index: number): number {
+  return index + 1 - (prompt.custom_option_index !== null && prompt.custom_option_index < index ? 1 : 0);
 }
 
 /** "Yes, proceed (y)" binds y; "No, and tell Codex what to do differently (esc)" binds nothing typeable. */
@@ -30,8 +35,7 @@ export function answerFromText(prompt: InteractivePrompt, text: string): TypedAn
   const valid = choices(prompt);
   const byNumber = (token: string): number | null => {
     if (!/^\d+$/.test(token)) return null;
-    const index = Number(token) - 1;
-    return valid.includes(index) ? index : null;
+    return valid[Number(token) - 1] ?? null;
   };
   if (prompt.multi_select) {
     const indices = value.split(/[\s,]+/).filter(Boolean).map(byNumber);
@@ -50,7 +54,7 @@ export function answerFromText(prompt: InteractivePrompt, text: string): TypedAn
 }
 
 function range(prompt: InteractivePrompt): string {
-  const numbers = choices(prompt).map((index) => index + 1);
+  const numbers = choices(prompt).map((index) => optionNumber(prompt, index));
   return numbers.length > 1 ? `${numbers[0]}–${numbers.at(-1)}` : String(numbers[0] ?? 1);
 }
 
