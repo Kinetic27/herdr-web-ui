@@ -297,11 +297,23 @@ export function gjcCustomEditorMatches(screen: string, expected: ParsedPrompt, d
   const input = findLastIndex(lines.slice(0, footerStart), (line) => /^>(?:\s|$)/.test(cleanLine(line)));
   if (input < 0) return false;
   const editorLines = lines.slice(input, footerStart).map((line) => cleanLine(line));
-  // A wrapped or multiline draft cannot be compared losslessly from this viewport. Leave it in
-  // the terminal rather than submit an answer whose whitespace may have changed locally.
-  if (editorLines.slice(1).some(Boolean) || /[\r\n]/.test(draft)) return false;
-  const text = editorLines[0]!.replace(/^> ?/, "");
-  if (text !== draft.normalize("NFC").replace(/\t/g, "    ")) return false;
+
+  if (/[\r\n]/.test(draft)) return false;
+  editorLines[0] = editorLines[0]!.replace(/^> ?/, "");
+  while (editorLines.length > 1 && editorLines.at(-1) === "") editorLines.pop();
+  // Like claudeRestoredDraft, walk exact row contents: a soft wrap can split a word or
+  // consume one separating space. Do not flatten internal whitespace or accept missing text.
+  const text = draft.normalize("NFC").replace(/\t/g, "    ");
+  let positions = new Set([0]);
+  for (const [index, row] of editorLines.entries()) {
+    const next = new Set<number>();
+    for (const from of positions) {
+      const starts = index > 0 && text[from] === " " ? [from, from + 1] : [from];
+      for (const start of starts) if (text.startsWith(row, start)) next.add(start + row.length);
+    }
+    positions = next;
+  }
+  if (!positions.has(text.length)) return false;
   const restored = [...lines.slice(0, input), "↑/↓ select enter esc PgUp/PgDn/Ctrl+u/d: question · Wheel: transcript", ...lines.slice(footerEnd + 1)].join("\n");
   const prompt = parseFallbackPrompt("gjc", restored);
   const parsed = parsedByPublicPrompt.get(prompt);

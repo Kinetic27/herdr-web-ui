@@ -3894,6 +3894,8 @@ describe("an answer and the menu it was made for", () => {
     agentUnanswered?: boolean;
     /** what an ANSI read shows instead of `screen`: the pane's viewport, scrolled off its live screen */
     viewport?: string;
+    /** A text viewport scrolled away from detection's live drawing. */
+    visibleScreen?: string;
     /** the next screen read alone answers with this, that much later */
     nextRead?: { text: string; delay: number };
     /** herdr presses this key and its reply is lost on the way */
@@ -3919,7 +3921,7 @@ describe("an answer and the menu it was made for", () => {
       socket.on("data", (chunk) => {
         input += chunk.toString();
         if (!input.includes("\n")) return;
-        const request = JSON.parse(input.split("\n")[0]!) as { id: string; method: string; params: { keys?: string[]; text?: string; format?: string } };
+        const request = JSON.parse(input.split("\n")[0]!) as { id: string; method: string; params: { keys?: string[]; text?: string; format?: string; source?: string } };
         const answer = (result: unknown) => socket.end(`${JSON.stringify({ id: request.id, result })}\n`);
         const snapshotDelay = request.method === "session.snapshot" ? pane.nextSnapshotDelay : undefined;
         if (snapshotDelay !== undefined) pane.nextSnapshotDelay = undefined;
@@ -3929,7 +3931,7 @@ describe("an answer and the menu it was made for", () => {
           const once = pane.nextRead;
           pane.nextRead = undefined;
           if (once) return void setTimeout(() => answer({ read: { text: once.text } }), once.delay);
-          return void setTimeout(() => answer({ read: { text: request.params.format === "ansi" ? pane.viewport ?? pane.screen : pane.screen } }), pane.readDelay ?? 0);
+          return void setTimeout(() => answer({ read: { text: request.params.source === "visible" && pane.visibleScreen !== undefined ? pane.visibleScreen : request.params.format === "ansi" ? pane.viewport ?? pane.screen : pane.screen } }), pane.readDelay ?? 0);
         }
         if (request.method === "pane.process_info") return answer({ process_info: { foreground_processes: pane.omo?.live ? [{ pid: pane.omo.pid, argv: ["omo"] }] : [] } });
         if (request.method === "agent.get" && pane.agentUnanswered) return;
@@ -4322,7 +4324,9 @@ ${heldRule}
   });
 
   test("does not submit a GJC custom draft after its editor closes or the draft changes", async () => {
-    for (const next of ["Ready\n\n❯ ", gjcCustomScreen(1, "Changed locally"), gjcCustomScreen(1, "Original\ndraft"), gjcCustomScreen(1, "Original  draft")]) {
+    // Soft wrapping can put the space between words at the row boundary. Changed content,
+    // doubled internal spaces, and incomplete drafts still must not be submitted.
+    for (const next of ["Ready\n\n❯ ", gjcCustomScreen(1, "Changed locally"), gjcCustomScreen(1, "Original\nchanged"), gjcCustomScreen(1, "Original  draft"), gjcCustomScreen(1, "Original")]) {
       await withPane("gjc", "blocked", gjcCustomScreen(), async (pane) => {
         pane.onSent = (sent) => {
           if (sent === "down") pane.screen = gjcCustomScreen(1);
@@ -4333,6 +4337,35 @@ ${heldRule}
         expect(pane.sent).toEqual(["down", "enter", "text:\u001b[200~Original draft\u001b[201~"]);
       });
     }
+  });
+
+  test("submits soft-wrapped GJC drafts from the live drawing while the viewport shows history", async () => {
+    for (const draft of ["Original\ndraft", "Orig\ninal draft"]) {
+      await withPane("gjc", "blocked", gjcCustomScreen(), async (pane) => {
+        pane.visibleScreen = "Earlier output\n\n❯ ";
+        pane.onSent = (sent) => {
+          if (sent === "down") pane.screen = gjcCustomScreen(1);
+          else if (sent === "enter") pane.screen = gjcCustomScreen(1, "");
+          else if (sent.startsWith("text:")) pane.screen = gjcCustomScreen(1, draft);
+        };
+        expect(await answer((await card())!.id, { custom_text: "Original draft" })).toEqual({ status: 200, code: undefined });
+        expect(pane.sent).toEqual(["down", "enter", "text:\u001b[200~Original draft\u001b[201~", "enter"]);
+      });
+    }
+  });
+
+  test("never uses a historical GJC editor when the live drawing has closed", async () => {
+    await withPane("gjc", "blocked", gjcCustomScreen(), async (pane) => {
+      pane.onSent = (sent) => {
+        if (sent === "down") pane.screen = gjcCustomScreen(1);
+        else if (sent === "enter") {
+          pane.screen = "Ready\n\n❯ ";
+          pane.visibleScreen = gjcCustomScreen(1, "");
+        } else if (sent.startsWith("text:")) pane.visibleScreen = gjcCustomScreen(1, "Do not send");
+      };
+      expect(await answer((await card())!.id, { custom_text: "Do not send" })).toEqual({ status: 409, code: "prompt_changed" });
+      expect(pane.sent).toEqual(["down", "enter"]);
+    });
   });
 
   test("does not resume GJC text delivery after seeing its editor dismissed once", async () => {
