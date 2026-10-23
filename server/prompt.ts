@@ -650,6 +650,7 @@ export function answerKeys(prompt: InteractivePrompt, answer: Pick<PromptAnswer,
     if (parsed.responder === "fallback-gjc-menu") {
       if (/[\r\n]/.test(text)) throw new InvalidAnswer("Use the terminal for a multiline GJC custom answer.");
       if (/[\u0000-\u0008\u000b-\u001f\u007f]/.test(text)) throw new InvalidAnswer("Custom text contains unsupported control characters.");
+      // GJC handles bracketed paste atomically without /, @ or # autocomplete, as in core/pending.ts.
       return [...keySteps([...navigationKeys(parsed.customMenuIndex - parsed.selectedIndex), KEY.enter]), { text: `\u001b[200~${text}\u001b[201~` }, ...keySteps([KEY.enter])];
     }
     if (parsed.customSteps) return parsed.customSteps(text);
@@ -1999,7 +2000,7 @@ export async function handlePromptRequest(request: Request, url: URL, options: P
           const deadline = Date.now() + SETTLE_MS;
           while (asks() && !request.signal.aborted && Date.now() < deadline) {
             const read = await Promise.race([
-              paneRead({ paneId: body.pane_id, source: "visible" }),
+              paneRead({ paneId: body.pane_id, source: "detection" }),
               Bun.sleep(Math.max(0, deadline - Date.now())).then(() => null),
             ]);
             if (!read || !asks() || request.signal.aborted || Date.now() >= deadline) return false;
