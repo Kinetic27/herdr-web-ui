@@ -1,7 +1,7 @@
 import type { DialogReader } from "./registry.ts";
 import { type InteractivePrompt } from "../../shared/protocol.ts";
 import { createHash } from "node:crypto";
-import { ANSI_RE, type AnswerStep, KEY, type MenuRow, NUMBERED_OPTION_RE, type NumberedRow, type ParsedPrompt, SELECTED_RE, cleanLine, findLastIndex, finishPrompt, isDivider, keySteps, navigationKeys, normalizeText, parseNumberedRows, publicPrompt, sequentialRows } from "./shared.ts";
+import { ANSI_RE, type AnswerStep, KEY, type MenuRow, NUMBERED_OPTION_RE, type NumberedRow, type ParsedPrompt, SELECTED_RE, cleanLine, findLastIndex, finishPrompt, isDivider, keySteps, navigationKeys, normalizeText, parseNumberedRows, parsedByPublicPrompt, publicPrompt, sequentialRows } from "./shared.ts";
 
 /**
  * The last resort, for a pane herdr reports blocked that none of the readers above know (a
