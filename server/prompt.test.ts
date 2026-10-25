@@ -4339,17 +4339,41 @@ ${heldRule}
     }
   });
 
-  test("submits soft-wrapped GJC drafts from the live drawing while the viewport shows history", async () => {
-    for (const draft of ["Original\ndraft", "Orig\ninal draft"]) {
-      await withPane("gjc", "blocked", gjcCustomScreen(), async (pane) => {
-        pane.visibleScreen = "Earlier output\n\n❯ ";
+  test.each([
+    ["Original draft", "Original\ndraft"],
+    ["Original draft", "Orig\ninal draft"],
+    ["Original > draft", "Original\n> draft"],
+    ["Original  draft", "Original \n draft"],
+  ])("submits soft-wrapped GJC draft %s from the live drawing while the viewport shows history", async (text, draft) => {
+    await withPane("gjc", "blocked", gjcCustomScreen(), async (pane) => {
+      pane.visibleScreen = "Earlier output\n\n❯ ";
+      pane.onSent = (sent) => {
+        if (sent === "down") pane.screen = gjcCustomScreen(1);
+        else if (sent === "enter") pane.screen = gjcCustomScreen(1, "");
+        else if (sent.startsWith("text:")) pane.screen = gjcCustomScreen(1, draft);
+      };
+      expect(await answer((await card())!.id, { custom_text: text })).toEqual({ status: 200, code: undefined });
+      expect(pane.sent).toEqual(["down", "enter", `text:\u001b[200~${text}\u001b[201~`, "enter"]);
+    });
+  });
+
+  test("rejects a GJC editor whose question body changes beyond the display cap", async () => {
+    const body = "Approval details ".repeat(800);
+    const draw = (at: number, draft: string | null, suffix: string) =>
+      gjcCustomScreen(at, draft, `${body}${suffix}\nWhich scope?`);
+    for (const changedAfterPaste of [false, true]) {
+      await withPane("gjc", "blocked", draw(0, null, "Original"), async (pane) => {
         pane.onSent = (sent) => {
-          if (sent === "down") pane.screen = gjcCustomScreen(1);
-          else if (sent === "enter") pane.screen = gjcCustomScreen(1, "");
-          else if (sent.startsWith("text:")) pane.screen = gjcCustomScreen(1, draft);
+          if (sent === "down") pane.screen = draw(1, null, "Original");
+          else if (sent === "enter") pane.screen = draw(1, "", changedAfterPaste ? "Original" : "Changed");
+          else if (sent.startsWith("text:")) pane.screen = draw(1, "My answer", "Changed");
         };
-        expect(await answer((await card())!.id, { custom_text: "Original draft" })).toEqual({ status: 200, code: undefined });
-        expect(pane.sent).toEqual(["down", "enter", "text:\u001b[200~Original draft\u001b[201~", "enter"]);
+        const prompt = (await card())!;
+        expect(prompt.body).toHaveLength(12_000);
+        expect(await answer(prompt.id, { custom_text: "My answer" })).toEqual({ status: 409, code: "prompt_changed" });
+        expect(pane.sent).toEqual(changedAfterPaste
+          ? ["down", "enter", "text:\u001b[200~My answer\u001b[201~"]
+          : ["down", "enter"]);
       });
     }
   });

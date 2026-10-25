@@ -183,12 +183,17 @@ function steadyFields(question: string | undefined, body: string | null, steady:
   return { ...(question === undefined ? {} : { question: steady(question) }), body: body === null ? null : body.split("\n").map(steady).join("\n") };
 }
 
+const gjcMenuIdentities = new WeakMap<ParsedPrompt, string>();
+
 /**
  * A fallback card's id covers the whole visible screen, not just the lines it shows: a changed
  * command, footer or wrapped label anywhere on it makes an answer to the old card stale. A working
  * line's spinner, time and token count are the one thing it leaves out (steadyReader).
  */
 function screenCard(lines: string[], shown: number[], steady: SteadyReader, parsed: ParsedPrompt, cursorRows?: ReadonlySet<number>): InteractivePrompt {
+  // Preserve the card hash before adding the selector footer's screen hash. The inline editor
+  // has a different footer, but must retain the full question body hashed before its display cap.
+  if (parsed.responder === "fallback-gjc-menu") gjcMenuIdentities.set(parsed, parsed.id);
   // A cmd heredoc's indentation and separators can change which text is executable.
   const screen = parsed.agent === "cmd" ? lines.join("\n") : shown.map((index) => {
     const line = cleanLine(lines[index]!);
@@ -280,6 +285,8 @@ function fallbackGjcSelectionMenu(agent: string, lines: string[], shown: number[
 /** The same framed question must still own the inline Other editor before any text is sent. */
 export function gjcCustomEditorMatches(screen: string, expected: ParsedPrompt, draft: string): boolean {
   if (expected.responder !== "fallback-gjc-menu" || expected.customMenuIndex === null) return false;
+  const identity = gjcMenuIdentities.get(expected);
+  if (!identity || /[\r\n]/.test(draft)) return false;
   const lines = screen.replace(ANSI_RE, "").split(/\r?\n/);
   const shown = lines.flatMap((line, index) => cleanLine(line) && !isDivider(line) ? [index] : []);
   const footer = "enter submit esc back to options ctrl+g external editor PgUp/PgDn: question · Wheel: transcript";
@@ -294,32 +301,32 @@ export function gjcCustomEditorMatches(screen: string, expected: ParsedPrompt, d
     }
   }
   if (footerStart < 0) return false;
-  const input = findLastIndex(lines.slice(0, footerStart), (line) => /^>(?:\s|$)/.test(cleanLine(line)));
-  if (input < 0) return false;
-  const editorLines = lines.slice(input, footerStart).map((line) => cleanLine(line));
-
-  if (/[\r\n]/.test(draft)) return false;
-  editorLines[0] = editorLines[0]!.replace(/^> ?/, "");
-  while (editorLines.length > 1 && editorLines.at(-1) === "") editorLines.pop();
-  // Like claudeRestoredDraft, walk exact row contents: a soft wrap can split a word or
-  // consume one separating space. Do not flatten internal whitespace or accept missing text.
-  const text = draft.normalize("NFC").replace(/\t/g, "    ");
-  let positions = new Set([0]);
-  for (const [index, row] of editorLines.entries()) {
-    const next = new Set<number>();
-    for (const from of positions) {
-      const starts = index > 0 && text[from] === " " ? [from, from + 1] : [from];
-      for (const start of starts) if (text.startsWith(row, start)) next.add(start + row.length);
+  // A wrapped draft can itself start a row with "> ". Only the start that restores the
+  // original selector identity belongs to its editor, rather than to the draft or transcript.
+  for (const input of shown.filter((index) => index < footerStart && /^>(?:\s|$)/.test(cleanLine(lines[index]!)))) {
+    const restored = [...lines.slice(0, input), "↑/↓ select enter esc PgUp/PgDn/Ctrl+u/d: question · Wheel: transcript", ...lines.slice(footerEnd + 1)].join("\n");
+    const parsed = parsedByPublicPrompt.get(parseFallbackPrompt("gjc", restored));
+    if (parsed?.responder !== expected.responder || parsed.selectedIndex !== expected.customMenuIndex
+      || gjcMenuIdentities.get(parsed) !== identity) continue;
+    // Keep leading spaces in continuation rows: a wrap can split two adjacent spaces.
+    const editorLines = lines.slice(input, footerStart).map((line) => line.normalize("NFC").replace(/\t/g, "    ").trimEnd());
+    editorLines[0] = editorLines[0]!.replace(/^\s*> ?/, "");
+    while (editorLines.length > 1 && editorLines.at(-1) === "") editorLines.pop();
+    // Like claudeRestoredDraft, walk exact row contents: a soft wrap can split a word or
+    // consume one separating space. Do not flatten internal whitespace or accept missing text.
+    const text = draft.normalize("NFC").replace(/\t/g, "    ");
+    let positions = new Set([0]);
+    for (const [index, row] of editorLines.entries()) {
+      const next = new Set<number>();
+      for (const from of positions) {
+        const starts = index > 0 && text[from] === " " ? [from, from + 1] : [from];
+        for (const start of starts) if (text.startsWith(row, start)) next.add(start + row.length);
+      }
+      positions = next;
     }
-    positions = next;
+    if (positions.has(text.length)) return true;
   }
-  if (!positions.has(text.length)) return false;
-  const restored = [...lines.slice(0, input), "↑/↓ select enter esc PgUp/PgDn/Ctrl+u/d: question · Wheel: transcript", ...lines.slice(footerEnd + 1)].join("\n");
-  const prompt = parseFallbackPrompt("gjc", restored);
-  const parsed = parsedByPublicPrompt.get(prompt);
-  return parsed?.responder === expected.responder && parsed.selectedIndex === expected.customMenuIndex
-    && prompt.question === expected.question && prompt.body === expected.body
-    && JSON.stringify(prompt.options) === JSON.stringify(expected.options);
+  return false;
 }
 
 /**
