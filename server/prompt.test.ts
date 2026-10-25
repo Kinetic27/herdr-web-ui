@@ -7,6 +7,8 @@ import type { InteractivePrompt } from "../shared/protocol.ts";
 
 import { answerKeys, hermesInputDraft, claudeClearableDraft, claudeInputBoxText, claudeInputDraft, claudeInputEmpty, viewportShowsLive, removedInvisible, noteSubmitted, codexQuestionsCollapsed, codexQueuedPrompt, handlePromptRequest, openOmoAsks, parseClaudeSuggestion, parseFallbackPrompt, parseInteractivePrompt, pendingOmoAsk, promptWaitEnded, claudeRestoredDraft, lastChatSubmitted } from "./prompt.ts";
 import { registry } from "./dialogs/registry.ts";
+import { gjcCustomEditorMatches } from "./dialogs/fallback.ts";
+import { parsedByPublicPrompt } from "./dialogs/shared.ts";
 
 const labels = (prompt: InteractivePrompt | null) => prompt?.options.map((option) => option.label);
 // Real omo-ai 5.1.30 pane.read captures at 120 and 45 columns, with the recorded open calls.
@@ -4295,6 +4297,20 @@ ${heldRule}
 
   const gjcCustomScreen = (at = 0, draft: string | null = null, question = "Which scope?") =>
     `──────────────\n\n${question}\n\n──────────────\n${["Read only", "Other (type your own)", "Ask about these choices"].map((label, index) => `│${at === index ? "" : " "} ${label} │`).join("\n")}\n──────────────\n\n${draft === null ? "↑/↓ select enter esc PgUp/PgDn/Ctrl+u/d: question · Wheel: transcript" : `> ${draft}\n\nenter submit esc back to options ctrl+g external editor PgUp/PgDn: question · Wheel: transcript`}\n\n──────────────\n`;
+
+  test("matches a GJC editor below thousands of quoted body rows without losing its identity", () => {
+    const body = "> Quoted body details\n".repeat(4_000);
+    const question = `${body}Which scope?`;
+    const expected = parsedByPublicPrompt.get(parseFallbackPrompt("gjc", gjcCustomScreen(0, null, question)))!;
+    expect(expected.body).toHaveLength(12_000);
+    expect(gjcCustomEditorMatches(gjcCustomScreen(1, "", question), expected, "")).toBe(true);
+    expect(gjcCustomEditorMatches(gjcCustomScreen(1, "Original\n> draft", question), expected, "Original > draft")).toBe(true);
+    expect(gjcCustomEditorMatches(gjcCustomScreen(1, "Original \n draft", question), expected, "Original  draft")).toBe(true);
+    const wrapped = ["Original", ...Array<string>(32).fill("> draft")];
+    expect(gjcCustomEditorMatches(gjcCustomScreen(1, wrapped.join("\n"), question), expected, wrapped.join(" "))).toBe(true);
+    expect(gjcCustomEditorMatches(gjcCustomScreen(1, "Changed draft", question), expected, "Original draft")).toBe(false);
+    expect(gjcCustomEditorMatches(gjcCustomScreen(1, "", `${body}Changed details\nWhich scope?`), expected, "")).toBe(false);
+  });
 
   test("sends a GJC Other answer only after its own inline editor opens and contains the pasted draft", async () => {
     await withPane("gjc", "blocked", gjcCustomScreen(), async (pane) => {

@@ -301,30 +301,41 @@ export function gjcCustomEditorMatches(screen: string, expected: ParsedPrompt, d
     }
   }
   if (footerStart < 0) return false;
+  const text = draft.normalize("NFC").replace(/\t/g, "    ");
+  const draftCharacters = text.replace(/\s/g, "").length;
+  // Normalize the rows once, not the entire suffix again for every quoted body row.
+  const editorLines = lines.slice(0, footerStart).map((line) => line.normalize("NFC").replace(/\t/g, "    ").trimEnd());
+  while (editorLines.at(-1) === "") editorLines.pop();
+  let characters = 0;
   // A wrapped draft can itself start a row with "> ". Only the start that restores the
   // original selector identity belongs to its editor, rather than to the draft or transcript.
-  for (const input of shown.filter((index) => index < footerStart && /^>(?:\s|$)/.test(cleanLine(lines[index]!)))) {
-    const restored = [...lines.slice(0, input), "↑/↓ select enter esc PgUp/PgDn/Ctrl+u/d: question · Wheel: transcript", ...lines.slice(footerEnd + 1)].join("\n");
-    const parsed = parsedByPublicPrompt.get(parseFallbackPrompt("gjc", restored));
-    if (parsed?.responder !== expected.responder || parsed.selectedIndex !== expected.customMenuIndex
-      || gjcMenuIdentities.get(parsed) !== identity) continue;
-    // Keep leading spaces in continuation rows: a wrap can split two adjacent spaces.
-    const editorLines = lines.slice(input, footerStart).map((line) => line.normalize("NFC").replace(/\t/g, "    ").trimEnd());
-    editorLines[0] = editorLines[0]!.replace(/^\s*> ?/, "");
-    while (editorLines.length > 1 && editorLines.at(-1) === "") editorLines.pop();
+  for (let input = editorLines.length - 1; input >= 0; input--) {
+    characters += editorLines[input]!.replace(/\s/g, "").length;
+    // The editor marker adds exactly one non-whitespace character to the draft. Once the
+    // suffix has more, no earlier start can spell it; each "> " candidate adds another.
+    if (characters > draftCharacters + 1) break;
+    if (characters !== draftCharacters + 1 || !/^>(?:\s|$)/.test(cleanLine(editorLines[input]!))) continue;
     // Like claudeRestoredDraft, walk exact row contents: a soft wrap can split a word or
     // consume one separating space. Do not flatten internal whitespace or accept missing text.
-    const text = draft.normalize("NFC").replace(/\t/g, "    ");
     let positions = new Set([0]);
-    for (const [index, row] of editorLines.entries()) {
+    for (let index = input; index < editorLines.length; index++) {
+      // Keep leading spaces in continuation rows: a wrap can split two adjacent spaces.
+      const row = index === input ? editorLines[index]!.replace(/^\s*> ?/, "") : editorLines[index]!;
       const next = new Set<number>();
       for (const from of positions) {
-        const starts = index > 0 && text[from] === " " ? [from, from + 1] : [from];
+        const starts = index > input && text[from] === " " ? [from, from + 1] : [from];
         for (const start of starts) if (text.startsWith(row, start)) next.add(start + row.length);
       }
       positions = next;
+      if (positions.size === 0) break;
     }
-    if (positions.has(text.length)) return true;
+    if (!positions.has(text.length)) continue;
+    // At most one candidate has the draft's character count. Check its spelling before
+    // rebuilding and parsing the uncapped question, so quoted bodies cost one parse, not N.
+    const restored = [...lines.slice(0, input), "↑/↓ select enter esc PgUp/PgDn/Ctrl+u/d: question · Wheel: transcript", ...lines.slice(footerEnd + 1)].join("\n");
+    const parsed = parsedByPublicPrompt.get(parseFallbackPrompt("gjc", restored));
+    return parsed?.responder === expected.responder && parsed.selectedIndex === expected.customMenuIndex
+      && gjcMenuIdentities.get(parsed) === identity;
   }
   return false;
 }
